@@ -1,0 +1,12 @@
+.git
+.github
+.env
+.env.*
+auth
+tmp
+node_modules
+dist
+public
+dist-windows
+coverage
+WIKI
