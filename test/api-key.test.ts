@@ -30,3 +30,13 @@ test("mantém a API fechada quando a chave não foi configurada", async ({ onTes
   onTestFinished(() => app.close());
   assert.equal((await app.inject({ url: "/api/session", headers: apiHeaders })).statusCode, 401);
 });
+
+test("abre a sessão pública com X-API-Key sem revelar a chave", async ({ onTestFinished }) => {
+  const app = buildApp({ access: { apiKey } });
+  onTestFinished(() => app.close());
+  const session = await app.inject({ url: "/api/session", headers: apiHeaders });
+  assert.equal(session.statusCode, 200);
+  assert.equal(session.json().role, "friend");
+  assert.equal(session.body.includes(apiKey), false);
+  assert.equal((await app.inject("/auth/session")).statusCode, 404);
+});

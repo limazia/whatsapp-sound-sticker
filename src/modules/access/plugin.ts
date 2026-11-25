@@ -9,7 +9,6 @@ import { docsPath } from "@/config/swagger.config";
 const sessionCookie = "soundsticker_session";
 const sessionSeconds = 8 * 60 * 60;
 const digest = (value: string) => createHash("sha256").update(value).digest();
-
 type Role = "admin" | "friend";
 type Session = {
   id: string;
@@ -20,7 +19,6 @@ type Session = {
 export interface AccessOptions {
   apiKey?: string;
   adminPassword?: string;
-  friendCode?: string;
   docsUser?: string;
   docsPassword?: string;
   development?: boolean;
@@ -28,7 +26,6 @@ export interface AccessOptions {
 }
 
 interface AccessService {
-  login(code: string, request: FastifyRequest, reply: FastifyReply): Session | null;
   logout(request: FastifyRequest, reply: FastifyReply): void;
 }
 
@@ -51,7 +48,6 @@ const accessPlugin: FastifyPluginAsync<AccessOptions> = async (app, options) => 
   await app.register(rateLimit, { global: false });
   const apiKey = options.apiKey && digest(options.apiKey);
   const admin = options.adminPassword && digest(options.adminPassword);
-  const friend = options.friendCode && digest(options.friendCode);
   const docsUser = options.docsUser && digest(options.docsUser);
   const docsPassword = options.docsPassword && digest(options.docsPassword);
   const sessions = new Map<string, { session: Session; revoke: () => void }>();
@@ -104,10 +100,6 @@ const accessPlugin: FastifyPluginAsync<AccessOptions> = async (app, options) => 
 
   app.decorateRequest("access", null);
   app.decorate("access", {
-    login(code, request, reply) {
-      if (!friend || !timingSafeEqual(digest(code), friend)) return null;
-      return issueSession("friend", request, reply);
-    },
     logout(request, reply) {
       sessions.get(request.cookies[sessionCookie] ?? "")?.revoke();
       reply.clearCookie(sessionCookie, cookieOptions);
@@ -118,7 +110,8 @@ const accessPlugin: FastifyPluginAsync<AccessOptions> = async (app, options) => 
     const path = request.url.split("?", 1)[0] ?? "";
     const isApi = path === "/api" || path.startsWith("/api/");
     const isAdminPage = path === "/admin" || path === "/admin/auth";
-    if ((!isApi && !isAdminPage) || request.method === "OPTIONS" || path === "/api/health") return;
+    if ((!isApi && !isAdminPage) ||
+        request.method === "OPTIONS" || path === "/api/health") return;
 
     reply.header("Cache-Control", "no-store");
     if (isApi) {
@@ -148,6 +141,9 @@ const accessPlugin: FastifyPluginAsync<AccessOptions> = async (app, options) => 
 
     request.access = sessions.get(request.cookies[sessionCookie] ?? "")?.session ?? null;
     const access = request.routeOptions.config?.access;
+    if (!request.access && (access === "friend" || (path === "/api/session" && request.method === "GET"))) {
+      request.access = issueSession("friend", request, reply);
+    }
     if (access === "public") return;
     if (!request.access) {
       return reply.code(401).send({ ok: false, error: "Entre com seu código de acesso." });

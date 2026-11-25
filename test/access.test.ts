@@ -6,14 +6,13 @@ import { apiHeaders, apiKey, adminAuthorization, adminCookies, adminPassword } f
 const friendCode = "friend-test-code";
 
 test("separa os acessos de administrador e amigo", async ({ onTestFinished }) => {
-  const app = buildApp({ access: { apiKey, adminPassword, friendCode } });
+  const app = buildApp({ access: { apiKey, adminPassword } });
   onTestFinished(() => app.close());
 
   assert.equal((await app.inject({ url: "/api/status", headers: apiHeaders })).statusCode, 401);
-  assert.equal((await app.inject({ method: "POST", url: "/api/prepare", headers: apiHeaders })).statusCode, 401);
   assert.equal((await app.inject("/api/health")).statusCode, 200);
 
-  const friend = await app.inject({ method: "POST", url: "/api/session", headers: apiHeaders, payload: { code: friendCode } });
+  const friend = await app.inject({ method: "GET", url: "/api/session", headers: apiHeaders });
   assert.equal(friend.statusCode, 200);
   assert.equal(friend.json().role, "friend");
   assert.equal(friend.json().qrDataUrl, undefined);
@@ -35,10 +34,10 @@ test("separa os acessos de administrador e amigo", async ({ onTestFinished }) =>
 
   const logout = await app.inject({ method: "DELETE", url: "/api/session", headers: apiHeaders, cookies });
   assert.equal(logout.statusCode, 200);
-  assert.equal((await app.inject({ url: "/api/session", headers: apiHeaders, cookies })).json().role, null);
+  assert.equal((await app.inject({ url: "/api/session", headers: apiHeaders, cookies })).json().role, "friend");
 
   const denied = await app.inject({ method: "POST", url: "/api/session", headers: apiHeaders, payload: { code: adminPassword } });
-  assert.equal(denied.statusCode, 401);
+  assert.equal(denied.statusCode, 404);
   const admin = await adminCookies(app);
   assert.equal((await app.inject({
     url: "/api/status", headers: apiHeaders, cookies: admin,
@@ -46,9 +45,9 @@ test("separa os acessos de administrador e amigo", async ({ onTestFinished }) =>
 });
 
 test("o login em produção emite cookie seguro e rejeita outra origem", async ({ onTestFinished }) => {
-  const app = buildApp({ nodeEnv: "production", trustProxy: (_address, hop) => hop === 0, access: { apiKey, adminPassword, friendCode } });
+  const app = buildApp({ nodeEnv: "production", trustProxy: (_address, hop) => hop === 0, access: { apiKey, adminPassword } });
   onTestFinished(() => app.close());
-  const request = { method: "POST" as const, url: "/api/session", headers: apiHeaders, payload: { code: friendCode } };
+  const request = { method: "GET" as const, url: "/api/session", headers: apiHeaders };
   const rejected = await app.inject({
     ...request, headers: { ...apiHeaders, host: "container.internal", "x-forwarded-host": "app.example", origin: "https://other.example" },
   });
@@ -61,7 +60,7 @@ test("o login em produção emite cookie seguro e rejeita outra origem", async (
 });
 
 test("pede Basic Auth antes de servir o painel e rejeita o código de amigo", async ({ onTestFinished }) => {
-  const app = buildApp({ access: { apiKey, adminPassword, friendCode } });
+  const app = buildApp({ access: { apiKey, adminPassword } });
   onTestFinished(() => app.close());
   const response = await app.inject("/admin");
   assert.equal(response.statusCode, 401);

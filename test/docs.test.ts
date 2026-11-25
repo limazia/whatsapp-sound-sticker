@@ -47,7 +47,7 @@ test('serve o Scalar e o OpenAPI gerado a partir das rotas', async ({ onTestFini
   assert.equal(Object.keys(spec.paths).filter((path) => path.startsWith('/api/docs')).length, 0)
 })
 
-test.each(["qa", "production"] as const)("protege o Scalar e os schemas em %s", async (nodeEnv) => {
+test.each(["test", "production"] as const)("protege o Scalar e os schemas em %s", async (nodeEnv) => {
   const docsUser = "docs-user";
   const docsPassword = "docs-password";
   const app = buildApp({ nodeEnv, access: { apiKey, docsUser, docsPassword } });
