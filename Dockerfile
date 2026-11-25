@@ -27,4 +27,4 @@ COPY --from=build /app/public ./public
 COPY scripts/container-start.ts ./container-start.ts
 EXPOSE 3000
 ENTRYPOINT ["node", "/app/container-start.ts"]
-CMD ["--enable-source-maps", "dist/server.js"]
+CMD ["node", "--enable-source-maps", "dist/server.js"]
