@@ -1,3 +1,5 @@
+import { join } from "node:path";
+import { authDir } from "@/shared/paths";
 import { buildApp } from "@/app";
 import { loadEnvironment } from "@/config/env.config";
 import { docsPath, docsTitle } from "@/config/swagger.config";
@@ -6,12 +8,12 @@ const env = loadEnvironment();
 const app = buildApp({
   logger: { level: env.LOG_LEVEL },
   nodeEnv: env.NODE_ENV,
+  activityFile: join(authDir(), "activity", "events.sqlite"),
   trustProxy: process.env.RAILWAY_ENVIRONMENT_ID ? (_address, hop) => hop === 0 : false,
   access: {
     apiKey: env.API_KEY,
     adminPassword: env.ADMIN_PASSWORD,
-    friendCode: env.FRIEND_KEY,
-    docsUser: env.DOCS_USER,
+    docsUser: env.DOCS_USERNAME,
     docsPassword: env.DOCS_PASSWORD,
   },
 });
@@ -19,6 +21,7 @@ const app = buildApp({
 try {
   const address = await app.listen({ host: env.HOST, port: env.PORT });
   const localUrl = new URL(address);
+  if (env.HOST === "localhost") localUrl.hostname = env.HOST;
   if (env.HOST === "0.0.0.0") localUrl.hostname = "127.0.0.1";
   if (env.HOST === "::") localUrl.hostname = "[::1]";
 
