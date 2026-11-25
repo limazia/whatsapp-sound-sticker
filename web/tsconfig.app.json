@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2025",
+    "lib": ["ES2025", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@components/*": ["./src/shared/components/*"],
+      "@lib/*": ["./src/shared/lib/*"],
+      "@utils/*": ["./src/shared/utils/*"]
+    }
+  },
+  "include": ["src"]
+}

@@ -1,0 +1,37 @@
+# dependencies and runtimes
+node_modules/
+runtime/
+dist-windows/
+
+# bundled binaries
+ffmpeg
+ffmpeg.exe
+node.exe
+*.exe
+
+# session / secrets
+auth/
+creds.json
+*.enc
+.env
+.env.*
+!.env.example
+
+# media outputs and local temp
+tmp/
+uploads/
+media/
+*.ogg
+*.webp
+
+# logs and OS
+*.log
+qr.png
+.DS_Store
+Thumbs.db
+
+# TypeScript and Yarn
+dist/
+/public/
+coverage/
+.yarn/
