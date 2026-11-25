@@ -2,17 +2,6 @@ import type { ZodType } from "zod";
 
 import { env } from "@/env";
 
-const storageKey = "soundsticker_api_key";
-
-export function getApiKey() {
-  return sessionStorage.getItem(storageKey) ?? "";
-}
-
-export function saveApiKey(key: string) {
-  if (key) sessionStorage.setItem(storageKey, key);
-  else sessionStorage.removeItem(storageKey);
-}
-
 export class ApiError extends Error {
   readonly status: number;
 
@@ -22,11 +11,8 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiResponse(path: string, options?: RequestInit, key = getApiKey()) {
-  if (!env || !path.startsWith(`${env.BASE_URL}api/`)) throw new Error("Caminho da API inválido.");
-  const headers = new Headers(options?.headers);
-  if (key) headers.set("X-API-Key", key);
-  const response = await fetch(path, { ...options, headers, redirect: "error" });
+async function request(path: string, options?: RequestInit) {
+  const response = await fetch(path, { ...options, redirect: "error" });
   if (!response.ok) {
     const data: { error?: string } | null = await response.json().catch(() => null);
     throw new ApiError(response.status, data?.error ?? "Falha na API.");
@@ -34,11 +20,21 @@ export async function apiResponse(path: string, options?: RequestInit, key = get
   return response;
 }
 
-export async function api<T>(path: string, schema: ZodType<T>, options?: RequestInit, key?: string) {
-  const response = await apiResponse(path, options, key);
+export function apiResponse(path: string, options?: RequestInit) {
+  if (!env || !path.startsWith(`${env.BASE_URL}api/`)) throw new Error("Caminho da API inválido.");
+  const headers = new Headers(options?.headers);
+  headers.set("X-API-Key", import.meta.env.API_KEY);
+  return request(path, { ...options, headers });
+}
+
+async function parseJson<T>(response: Response, schema: ZodType<T>) {
   const result = schema.safeParse(await response.json());
   if (!result.success) throw new Error("Resposta inválida da API.");
   return result.data;
+}
+
+export async function api<T>(path: string, schema: ZodType<T>, options?: RequestInit) {
+  return parseJson(await apiResponse(path, options), schema);
 }
 
 export function postJson(body: object) {

@@ -7,6 +7,7 @@ export const whatsappSchema = z.object({
   selfJid: z.string().nullable(),
   lastError: z.string().nullable(),
   hasAuth: z.boolean(),
+  history: z.array(z.string()).optional(),
 });
 
 export const logSchema = z.object({ message: z.string() });

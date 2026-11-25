@@ -9,5 +9,11 @@ interface SendStickerInput {
 }
 
 export function sendSticker(body: SendStickerInput) {
-  return api("/api/send", z.object({ ok: z.literal(true) }), postJson(body));
+  return api("/api/send", z.object({
+    ok: z.literal(true),
+    results: z.array(z.object({
+      kind: z.enum(["sound", "silent"]),
+      proto: z.object({ hasAudioMessage: z.boolean() }),
+    })),
+  }), postJson(body));
 }

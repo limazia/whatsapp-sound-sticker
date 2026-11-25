@@ -13,21 +13,26 @@ export async function streamEvents(signal: AbortSignal, events: WhatsAppEvents) 
   if (!response.body) throw new Error("Fluxo de eventos indisponível.");
 
   let buffer = "";
-  for await (const chunk of response.body.pipeThrough(new TextDecoderStream())) {
-    buffer += chunk;
-    const frames = buffer.split("\n\n");
-    buffer = frames.pop() ?? "";
-    for (const frame of frames) {
-      const event = /^event: (status|log)\ndata: (.+)$/m.exec(frame);
-      if (!event?.[2]) continue;
-      const data: unknown = JSON.parse(event[2]);
-      if (event[1] === "status") {
-        const status = whatsappSchema.safeParse(data);
-        if (status.success) events.onStatus(status.data);
-      } else {
-        const log = logSchema.safeParse(data);
-        if (log.success) events.onLog(log.data.message);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return;
+      buffer = (buffer + decoder.decode(value, { stream: true })).replace(/\r\n/g, "\n");
+      const frames = buffer.split("\n\n");
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        const event = /^event: ?(status|log)$/m.exec(frame)?.[1];
+        const payload = /^data: ?(.+)$/m.exec(frame)?.[1];
+        if (!event || !payload) continue;
+        const data: unknown = JSON.parse(payload);
+        if (event === "status") events.onStatus(whatsappSchema.parse(data));
+        else events.onLog(logSchema.parse(data).message);
       }
     }
+  } finally {
+    await reader.cancel();
+    reader.releaseLock();
   }
 }

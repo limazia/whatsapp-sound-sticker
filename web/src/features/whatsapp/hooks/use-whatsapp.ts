@@ -14,6 +14,7 @@ type WhatsAppAction = { type: "connect" | "disconnect" } | { type: "pair"; phone
 export function useWhatsApp() {
   const [whatsAppState, setWhatsAppState] = useState<WhatsAppState>();
   const [logs, setLogs] = useState<string[]>([]);
+  const [activityLive, setActivityLive] = useState(false);
   const [eventsError, setEventsError] = useState<Error>();
   const updateWhatsApp = useMutation({
     mutationFn: (action: WhatsAppAction) => {
@@ -32,17 +33,27 @@ export function useWhatsApp() {
     async function subscribe() {
       try {
         await streamEvents(controller.signal, {
-          onStatus: setWhatsAppState,
+          onStatus: (state) => {
+            setWhatsAppState(state);
+            setActivityLive(true);
+            setEventsError(undefined);
+            if (state.history) setLogs(state.history);
+          },
           onLog: (entry) => setLogs((previous) => [entry, ...previous].slice(0, 30)),
         });
       } catch (reason) {
         if (controller.signal.aborted) return;
+        setActivityLive(false);
         if (reason instanceof ApiError && [401, 403].includes(reason.status)) {
           setEventsError(reason);
           return;
         }
       }
-      if (!controller.signal.aborted) retry = window.setTimeout(() => void subscribe(), 3000);
+      if (!controller.signal.aborted) {
+        setActivityLive(false);
+        setEventsError(new Error("O painel perdeu a conexão com o servidor. Tentando reconectar…"));
+        retry = window.setTimeout(() => void subscribe(), 3000);
+      }
     }
     void subscribe();
     return () => {
@@ -51,5 +62,5 @@ export function useWhatsApp() {
     };
   }, []);
 
-  return { whatsAppState, updateWhatsApp, logs, eventsError };
+  return { whatsAppState, updateWhatsApp, logs, eventsError, activityLive };
 }
