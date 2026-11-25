@@ -8,6 +8,7 @@ RUN yarn install --frozen-lockfile --ignore-scripts --non-interactive
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src
 COPY web ./web
+ARG API_KEY
 RUN yarn build \
     && yarn install --production --frozen-lockfile --ignore-scripts --non-interactive
 

@@ -12,13 +12,13 @@ yarn setup
 yarn start
 ```
 
-Por padrão, a API escuta em `127.0.0.1:3000`. Para configurar o servidor, copie `.env.example` para `.env` e use `HOST` sem porta ou protocolo. A porta e o nível dos logs ficam em `PORT` e `LOG_LEVEL`. Use a porta escolhida nos exemplos abaixo.
+Para rodar localmente, defina `PORT=3000` e `HOST="localhost:${PORT}"` no `.env`. Também é possível usar um endereço IPv4 ou IPv6 no `HOST`. A porta em `HOST`, quando presente, deve ser igual a `PORT`. Configure o nível dos logs em `LOG_LEVEL`.
 
 Abra a [interface](http://127.0.0.1:3000/) para preparar e enviar figurinhas. O [painel do WhatsApp](http://127.0.0.1:3000/admin) mostra o QR, gera códigos de pareamento, acompanha eventos e desconecta a conta.
 
 Defina `ADMIN_PASSWORD` como sua senha. Ao abrir `/admin`, a caixa de autenticação do navegador pede o usuário `admin` e essa senha.
 
-A interface pede a `API_KEY` uma vez por aba e a envia no header `X-API-Key` nas chamadas ao Fastify. A página inicial e o healthcheck são públicos. Depois de informar a chave da API, seus amigos digitam o `FRIEND_KEY` para entrar. A sessão de amigo permite preparar figurinhas e enviá-las diretamente a qualquer número com DDI pela conta conectada. Somente o administrador pode ver os dados e operar a sessão do WhatsApp.
+Qualquer visitante pode preparar e enviar figurinhas pela conta conectada. O Vite lê a variável pública `API_KEY` da raiz ao compilar o frontend. O navegador envia esse valor em `X-API-Key` e o Fastify compara com a `API_KEY` do servidor. Ao trocar a chave, recompile o frontend. No Docker, forneça o mesmo valor como argumento de build e variável de execução.
 
 Em outro terminal, confira se a API está respondendo. A resposta inclui `ffmpeg.available`.
 
@@ -26,7 +26,7 @@ Em outro terminal, confira se a API está respondendo. A resposta inclui `ffmpeg
 curl http://127.0.0.1:3000/api/health
 ```
 
-Abra a [referência Scalar](http://127.0.0.1:3000/api/docs). Em `development`, a página abre sem login e preenche a chave da API no Scalar. Use esse modo em ambiente local. Em `qa` e `production`, entre com `DOCS_USER` e `DOCS_PASSWORD` e informe a `API_KEY` no Scalar para executar as chamadas. Os arquivos [JSON](http://127.0.0.1:3000/api/docs/openapi.json) e [YAML](http://127.0.0.1:3000/api/docs/openapi.yaml) seguem a mesma autenticação da página.
+Abra a [referência Scalar](http://127.0.0.1:3000/api/docs). Em `development`, a página abre sem login e preenche a chave da API no Scalar. Use esse modo em ambiente local. Em `test` e `production`, entre com `DOCS_USERNAME` e `DOCS_PASSWORD` e informe a `API_KEY` no Scalar para executar as chamadas. Os arquivos [JSON](http://127.0.0.1:3000/api/docs/openapi.json) e [YAML](http://127.0.0.1:3000/api/docs/openapi.yaml) seguem a mesma autenticação da página.
 
 ```sh
 curl -H "X-API-Key: $API_KEY" http://127.0.0.1:3000/api/session
@@ -40,7 +40,7 @@ As rotas que operam a sessão ou as figurinhas aceitam chamadas do navegador na 
 
 1. Chame `POST /api/connect` e acompanhe o QR pelo SSE em `GET /api/events`, ou peça um código em `POST /api/pair` com `phone` e DDI.
 2. Envie `media` e, opcionalmente, `audio` em `POST /api/prepare` como `multipart/form-data`. O limite é de 80 MB por arquivo. Guarde o `id` retornado.
-3. Com a sessão conectada, chame `POST /api/send` com esse `id` e o número de destino em `to`. Para o administrador, um destino vazio envia à própria conta.
+3. Com a sessão conectada, chame `POST /api/send` com esse `id` e o número de destino em `to`. O destino é obrigatório para todos. Na interface, o prefixo +55 já vem preenchido.
 4. Chame `POST /api/disconnect` para encerrar a sessão e apagar a autenticação local.
 
 ## Desenvolvimento
@@ -50,18 +50,18 @@ Use `yarn dev` para recarregar o backend e `yarn dev:web` em outro terminal para
 ## Publicar no Railway
 
 1. Conecte o repositório a um serviço no Railway. O `Dockerfile` compila o React e o Fastify e instala o FFmpeg. O healthcheck usa `/api/health`.
-2. Em **Variables**, configure `API_KEY`, `ADMIN_PASSWORD` e `FRIEND_KEY` com valores distintos. Use pelo menos 24 caracteres para a senha do administrador e o código de amigo. Configure também `DOCS_USER` e `DOCS_PASSWORD` para o Scalar. Para gerar uma senha, execute o comando abaixo.
+2. Em **Variables**, configure `API_KEY` e `ADMIN_PASSWORD` com valores distintos. Use pelo menos 24 caracteres para a senha do administrador. Configure também `DOCS_USERNAME` e `DOCS_PASSWORD` para o Scalar. Para gerar uma senha, execute o comando abaixo.
 
    ```sh
    node -e 'console.log(require("node:crypto").randomBytes(24).toString("hex"))'
    ```
 
 3. Monte um volume em `/app/auth`. O volume guarda as credenciais da sessão entre redeploys. Mantenha uma instância para a conta conectada.
-4. Em **Public Networking**, gere o domínio HTTPS. Abra `/admin` com o usuário `admin` e sua senha para conectar o WhatsApp. Compartilhe o domínio, a chave da API e o código de amigo. O servidor usa a porta `PORT` fornecida pelo Railway.
+4. Em **Public Networking**, gere o domínio HTTPS. Abra `/admin` com o usuário `admin` e sua senha para conectar o WhatsApp. Compartilhe o domínio. O servidor usa a porta `PORT` fornecida pelo Railway.
 
-Os logins do painel e as figurinhas preparadas ficam na instância atual. Após um reinício, entre novamente. O WhatsApp tenta restaurar a sessão salva. A atividade do painel mostra os 30 eventos mais recentes recebidos desde que a página foi aberta. O servidor também escreve as mensagens de atividade no log de execução, conforme `LOG_LEVEL`; o app não mantém histórico de eventos em disco. As figurinhas temporárias expiram em 30 minutos.
+Os logins do painel e as figurinhas preparadas ficam na instância atual. Após um reinício, entre novamente. O WhatsApp tenta restaurar a sessão salva. O painel guarda os últimos 30 eventos em `auth/activity/events.sqlite`. Eles continuam disponíveis após reiniciar o servidor quando a pasta `auth` está em um volume persistente. As figurinhas temporárias expiram em 30 minutos.
 
-Para testar o container localmente, configure os códigos no `.env` e rode `yarn compose`. O Compose publica a porta 3000 em loopback e guarda a sessão em um volume local.
+O projeto usa o cliente não oficial `plogme`, um fork do Baileys. Os dados de autenticação ficam em `auth/` até a desconexão da conta.
 
 ## Para que serve `scripts/`
 
