@@ -11,6 +11,7 @@ declare module "fastify" {
 export default fp(
   async (app) => {
     const whatsapp = createWhatsAppManager({
+      onActivity: app.events.log,
       onChange(state) {
         app.events.broadcast("status", state);
       },
