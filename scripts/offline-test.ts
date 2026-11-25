@@ -2,7 +2,7 @@ import { mkdir, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 
-import { generateWAMessageContent } from "@/modules/whatsapp/client";
+import { generateWAMessageContent, generateWAMessageFromContent, prepareSoundSticker } from "@/modules/whatsapp/client";
 import { convertToSticker } from "@/modules/stickers/convert";
 import { getFfmpegPath } from "@/shared/ffmpeg";
 import { tmpDir } from "@/shared/paths";
@@ -67,22 +67,27 @@ ok(!silent.stickerMessage.audioMessage, "silent proto has no audioMessage");
 if (result.audioPath) {
   ok((await stat(result.audioPath)).size > 1000, "ogg extracted");
   ok(
-    result.audioSeconds > 0 && result.audioSeconds <= 10.2,
+    result.audioSeconds > 0 && result.audioSeconds <= 10.05,
     `audio ${result.audioSeconds.toFixed(2)} s`,
   );
-  const sound = await generateWAMessageContent(
+  const sound = await prepareSoundSticker(
     {
       sticker: { url: result.stickerPath },
       stickerAudio: { url: result.audioPath },
       isAnimated: result.isAnimated,
     },
-    { upload: fakeUpload, logger },
+    fakeUpload, logger,
   );
-  ok(sound.stickerMessage, "sound proto has stickerMessage");
-  ok(sound.stickerMessage.audioMessage, "stickerMessage.audioMessage present");
-  console.log("sticker mimetype:", sound.stickerMessage.mimetype);
-  console.log("audio mimetype:", sound.stickerMessage.audioMessage.mimetype);
-  console.log("isAnimated:", sound.stickerMessage.isAnimated);
+  const outgoing = generateWAMessageFromContent("5500000000000@s.whatsapp.net", sound, { messageId: "offline" });
+  const sticker = outgoing.message.audioStickerMessage?.message?.stickerMessage;
+  ok(sticker, "sound proto has stickerMessage");
+  ok(sticker.audioMessage, "stickerMessage.audioMessage present");
+  ok(sticker.audioMessage.ptt == null, "audio is not marked as a voice note");
+  ok(sticker.audioMessage.streamingSidecar?.length, "streaming sidecar present");
+  console.log("sticker mimetype:", sticker.mimetype);
+  console.log("audio mimetype:", sticker.audioMessage.mimetype);
+  ok(sticker.width === 512 && sticker.height === 512, "prepared message includes sticker dimensions");
+  ok(Boolean(sticker.isAnimated) === (result.frameCount > 1), "animation flag matches encoded WebP frames");
 }
 
 if (result.warnings.length) console.log("warnings:", result.warnings);

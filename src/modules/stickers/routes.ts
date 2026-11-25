@@ -8,11 +8,12 @@ import type { FastifyPluginAsync } from "fastify";
 
 import { errorMessage } from "@/shared/errors";
 import { apiErrorSchema } from "@/shared/http-schemas";
+import { UnknownRecipientError } from "@/modules/whatsapp/service";
 import { convertToSticker } from "@/modules/stickers/convert";
 
 interface SendBody {
   id: string;
-  to?: string | number;
+  to: string | number;
   alsoSilent?: boolean;
 }
 
@@ -166,7 +167,7 @@ const stickerRoutes: FastifyPluginAsync = async (app) => {
             ? `, áudio ${result.audioSeconds.toFixed(1)} s`
             : "";
           events.log(
-            `Figurinha pronta (${(result.stickerBytes / 1024).toFixed(1)} KB${duration}).`,
+            `Figurinha ${result.isAnimated ? "animada" : "estática"} pronta (${result.frameCount} quadro(s), ${(result.stickerBytes / 1024).toFixed(1)} KB${duration}).`,
           );
           return {
             ok: true,
@@ -217,11 +218,11 @@ const stickerRoutes: FastifyPluginAsync = async (app) => {
         },
         body: {
           type: "object",
-          required: ["id"],
+          required: ["id", "to"],
           properties: {
             id: { type: "string", minLength: 1, maxLength: 64 },
             to: {
-              anyOf: [{ type: "string", maxLength: 128 }, { type: "integer" }],
+              anyOf: [{ type: "string", pattern: "\\S", maxLength: 128 }, { type: "integer", minimum: 1 }],
             },
             alsoSilent: { type: "boolean" },
           },
@@ -249,7 +250,7 @@ const stickerRoutes: FastifyPluginAsync = async (app) => {
       job.sending = true;
       job.expires.refresh();
       try {
-        events.log(`Enviando para ${to || "o próprio número"}…`);
+        events.log(`Enviando para ${to}…`);
         const result = await whatsapp.sendSticker({
           stickerPath: job.stickerPath,
           audioPath: job.audioPath,
@@ -261,14 +262,15 @@ const stickerRoutes: FastifyPluginAsync = async (app) => {
           result.results.find((entry) => entry.kind === "sound") ||
           result.results.at(-1);
         if (sound?.proto.hasAudioMessage)
-          events.log("Enviado. O proto inclui audioMessage.");
+          events.log("Mensagem encaminhada com áudio. Aguardando confirmação de entrega.");
         else if (job.audioPath)
-          events.log("Enviado, mas o proto não veio com audioMessage.");
-        else events.log("Enviado (figurinha sem áudio).");
+          events.log("Mensagem encaminhada sem a faixa de áudio preparada.");
+        else events.log("Mensagem encaminhada sem áudio. Aguardando confirmação de entrega.");
         return { ok: true, ...result };
       } catch (error) {
         const message = errorMessage(error);
         events.log(`Falha no envio: ${message}`);
+        if (error instanceof UnknownRecipientError) return reply.code(400).send({ ok: false, error: message });
         return reply.code(500).send({ ok: false, error: access.role === "admin" ? message : "Falha ao enviar. Confira a conexão do WhatsApp." });
       } finally {
         job.sending = false;
