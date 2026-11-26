@@ -1,10 +1,20 @@
 import assert from 'node:assert/strict'
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'vitest'
 import { buildApp } from '@/app'
 import { apiHeaders, apiKey, adminCookies, adminPassword } from './admin-session'
 
 test('abre SSE e encerra a conexão junto com o servidor', async ({ onTestFinished }) => {
-  const app = buildApp({ nodeEnv: 'development', access: { apiKey, adminPassword } })
+  const dir = await mkdtemp(join(tmpdir(), 'activity-test-'))
+  onTestFinished(() => rm(dir, { recursive: true, force: true }))
+  const options = { nodeEnv: 'development' as const, access: { apiKey, adminPassword }, activityFile: join(dir, 'activity.sqlite') }
+  const previous = buildApp(options)
+  await previous.ready()
+  for (let index = 0; index < 32; index++) previous.events.log(`Evento ${index}`)
+  await previous.close()
+  const app = buildApp(options)
   onTestFinished(() => app.close())
   const cookies = await adminCookies(app)
   const address = await app.listen({ host: '127.0.0.1', port: 0 })
@@ -18,6 +28,9 @@ test('abre SSE e encerra a conexão junto com o servidor', async ({ onTestFinish
   const reader = response.body.getReader()
   const initial = await reader.read()
   assert.match(Buffer.from(initial.value ?? []).toString(), /^event: status\ndata: /)
+  const frame = Buffer.from(initial.value ?? []).toString()
+  const history = JSON.parse(frame.match(/^data: (.+)$/m)![1]).history
+  assert.deepEqual(history, Array.from({ length: 30 }, (_, i) => `Evento ${31 - i}`))
   app.events.log('Log de teste')
   const update = await reader.read()
   assert.match(Buffer.from(update.value ?? []).toString(), /^event: log\ndata: .*Log de teste/)

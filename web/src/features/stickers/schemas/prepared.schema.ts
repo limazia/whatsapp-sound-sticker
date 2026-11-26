@@ -5,6 +5,7 @@ export const preparedSchema = z.object({
   preview: z.string(),
   audioUrl: z.string().startsWith("/api/jobs/").nullable(),
   audioSeconds: z.number(),
+  isAnimated: z.boolean(),
   stickerBytes: z.number(),
   warnings: z.array(z.string()),
 });

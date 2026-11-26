@@ -49,7 +49,7 @@ test('rejeita o envio de uma figurinha que não foi preparada', async ({ onTestF
     cookies,
     url: '/api/send',
     headers: apiHeaders,
-    payload: { id: 'unknown' }
+    payload: { id: 'unknown', to: '5500000000000' }
   })
 
   assert.equal(response.statusCode, 400)
@@ -66,10 +66,25 @@ test('rejeita uma opção de envio com tipo incorreto', async ({ onTestFinished 
     cookies,
     url: '/api/send',
     headers: apiHeaders,
-    payload: { id: 'unknown', alsoSilent: 'false' }
+    payload: { id: 'unknown', to: '5500000000000', alsoSilent: 'false' }
   })
 
   assert.equal(response.statusCode, 400)
   assert.equal(response.json().ok, false)
   assert.match(response.json().error, /alsoSilent/)
+})
+
+test.each([{}, { to: '' }, { to: '   ' }])('exige destino mesmo para o administrador (%j)', async (destination) => {
+  const app = buildApp({ access: { apiKey, adminPassword } })
+  try {
+    const cookies = await adminCookies(app)
+    const response = await app.inject({
+      method: 'POST', url: '/api/send', cookies, headers: apiHeaders,
+      payload: { id: 'unknown', ...destination }
+    })
+    assert.equal(response.statusCode, 400)
+    assert.match(response.json().error, /to/)
+  } finally {
+    await app.close()
+  }
 })

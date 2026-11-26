@@ -2,17 +2,18 @@ import assert from 'node:assert/strict'
 import { test } from 'vitest'
 import { envSchema } from '@/config/env.config'
 
-test('usa host e porta locais por padrão', () => {
-  const env = envSchema.parse({})
+test('usa a porta padrão quando recebe um IPv4', () => {
+  const env = envSchema.parse({ HOST: '127.0.0.1' })
   assert.equal(env.HOST, '127.0.0.1')
   assert.equal(env.PORT, 3000)
 })
 
-test('aceita development, test, qa e production como ambientes', () => {
-  for (const environment of ['development', 'test', 'qa', 'production']) {
-    assert.equal(envSchema.parse({ NODE_ENV: environment }).NODE_ENV, environment)
+test('aceita apenas development, test e production', () => {
+  const HOST = '127.0.0.1'
+  for (const environment of ['development', 'test', 'production']) {
+    assert.equal(envSchema.parse({ HOST, NODE_ENV: environment }).NODE_ENV, environment)
   }
-  assert.equal(envSchema.safeParse({ NODE_ENV: 'other' }).success, false)
+  assert.equal(envSchema.safeParse({ HOST, NODE_ENV: 'qa' }).success, false)
 })
 
 test('aceita porta configurada e host IPv6', () => {
@@ -22,11 +23,19 @@ test('aceita porta configurada e host IPv6', () => {
   assert.equal(env.LOG_LEVEL, 'debug')
 })
 
-test('rejeita URL no HOST e porta fora do intervalo', () => {
-  const result = envSchema.safeParse({ HOST: 'http://localhost:3000', PORT: '65536' })
-  assert.equal(result.success, false)
-  if (!result.success) {
-    assert.deepEqual(result.error.issues.map((issue) => issue.path), [['HOST'], ['PORT']])
+test('normaliza localhost e IP com a mesma porta de PORT', () => {
+  for (const [HOST, host] of [['localhost:3000', 'localhost'], ['127.0.0.1:3000', '127.0.0.1'], ['[::1]:3000', '::1']]) {
+    const env = envSchema.parse({ HOST, PORT: '3000' })
+    assert.equal(env.HOST, host)
+    assert.equal(env.PORT, 3000)
+  }
+})
+
+test('rejeita HOST ausente, URL e porta divergente', () => {
+  for (const HOST of [undefined, 'http://localhost:3000', 'localhost:8080', '[::1]:8080']) {
+    const result = envSchema.safeParse({ HOST, PORT: '3000' })
+    assert.equal(result.success, false)
+    if (!result.success) assert.deepEqual(result.error.issues.map((issue) => issue.path), [['HOST']])
   }
 })
 
@@ -34,10 +43,10 @@ test('preserva as credenciais da API e da documentação', () => {
   const credentials = {
     API_KEY: 'test-api-key',
     ADMIN_PASSWORD: 'test-admin-password',
-    DOCS_USER: 'test-user',
+    DOCS_USERNAME: 'test-user',
     DOCS_PASSWORD: 'test-password'
   }
-  assert.deepEqual(envSchema.parse(credentials), {
+  assert.deepEqual(envSchema.parse({ HOST: '127.0.0.1', ...credentials }), {
     NODE_ENV: 'development',
     HOST: '127.0.0.1',
     PORT: 3000,
@@ -47,11 +56,11 @@ test('preserva as credenciais da API e da documentação', () => {
 })
 
 test('rejeita credenciais vazias quando fornecidas', () => {
-  const result = envSchema.safeParse({ API_KEY: '', ADMIN_PASSWORD: '', DOCS_USER: '', DOCS_PASSWORD: '' })
+  const result = envSchema.safeParse({ HOST: '127.0.0.1', API_KEY: '', ADMIN_PASSWORD: '', DOCS_USERNAME: '', DOCS_PASSWORD: '' })
   assert.equal(result.success, false)
   if (!result.success) {
     assert.deepEqual(result.error.issues.map((issue) => issue.path), [
-      ['API_KEY'], ['ADMIN_PASSWORD'], ['DOCS_USER'], ['DOCS_PASSWORD']
+      ['API_KEY'], ['ADMIN_PASSWORD'], ['DOCS_USERNAME'], ['DOCS_PASSWORD']
     ])
   }
 })

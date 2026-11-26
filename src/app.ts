@@ -5,16 +5,17 @@ import type { FastifyServerOptions } from "fastify";
 import { join } from "node:path";
 
 import { createCorsConfig } from "@/config/cors.config";
-import { envSchema } from "@/config/env.config";
+import { nodeEnvironmentSchema } from "@/config/env.config";
 import accessPlugin from "@/modules/access/plugin";
 import type { AccessOptions } from "@/modules/access/plugin";
 import type { NodeEnvironment } from "@/config/env.config";
 
-type AppOptions = FastifyServerOptions & { nodeEnv?: NodeEnvironment; access?: AccessOptions };
+type AppOptions = FastifyServerOptions & { nodeEnv?: NodeEnvironment; access?: AccessOptions; activityFile?: string };
 
 export function buildApp({
-  nodeEnv = envSchema.parse(process.env).NODE_ENV,
+  nodeEnv = nodeEnvironmentSchema.parse(process.env.NODE_ENV),
   access = {},
+  activityFile,
   ...options
 }: AppOptions = {}) {
   const app = Fastify({
@@ -42,11 +43,11 @@ export function buildApp({
   app.register(accessPlugin, {
     ...access,
     development: nodeEnv === "development",
-    secure: nodeEnv === "production" || nodeEnv === "qa",
+    secure: nodeEnv === "production",
   });
   app.register(autoload, {
     dir: join(import.meta.dirname, "plugins"),
-    options: { scalarApiKey: nodeEnv === "development" ? access.apiKey : undefined },
+    options: { activityFile, scalarApiKey: nodeEnv === "development" ? access.apiKey : undefined },
   });
   app.register(autoload, {
     dir: join(import.meta.dirname, "modules"),

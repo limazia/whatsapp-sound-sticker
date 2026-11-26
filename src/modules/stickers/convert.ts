@@ -1,4 +1,4 @@
-import { mkdir, stat } from "node:fs/promises";
+import { mkdir, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import { fileInputOptions, probe, runFfmpeg } from "@/shared/ffmpeg";
@@ -34,6 +34,24 @@ function extOf(name = "") {
     .toLowerCase()
     .match(/(\.[a-z0-9]+)$/);
   return m ? m[1] : "";
+}
+
+function countWebpFrames(webp: Buffer) {
+  if (webp.toString("ascii", 0, 4) !== "RIFF" || webp.toString("ascii", 8, 12) !== "WEBP") {
+    throw new Error("O FFmpeg não gerou um arquivo WebP válido.");
+  }
+  let frames = 0;
+  let stillImage = false;
+  for (let offset = 12; offset + 8 <= webp.length;) {
+    const chunk = webp.toString("ascii", offset, offset + 4);
+    const size = webp.readUInt32LE(offset + 4);
+    offset += 8 + size + (size % 2);
+    if (offset > webp.length) throw new Error("A figurinha WebP ficou incompleta.");
+    if (chunk === "ANMF") frames++;
+    if (chunk === "VP8 " || chunk === "VP8L") stillImage = true;
+  }
+  if (!frames && !stillImage) throw new Error("A figurinha ficou sem imagem.");
+  return frames || 1;
 }
 
 function padFilter() {
@@ -117,7 +135,7 @@ async function encodeAnimatedWebp(
   return lastSize;
 }
 
-async function encodeAudio(input: string, output: string) {
+async function encodeAudio(input: string, output: string, maxSeconds: number) {
   await runFfmpeg([
     "-hide_banner",
     "-y",
@@ -125,7 +143,7 @@ async function encodeAudio(input: string, output: string) {
     "-i",
     input,
     "-t",
-    String(MAX_SECONDS),
+    String(maxSeconds),
     "-vn",
     "-c:a",
     "libopus",
@@ -203,20 +221,22 @@ export async function convertToSticker({
     }
   }
 
+  const frameCount = countWebpFrames(await readFile(stickerPath));
   let outAudio: string | null = null;
   let audioSeconds = 0;
   const audioSource = audioPath || (info.hasAudio ? mediaPath : null);
   if (audioSource) {
     const ogg = join(workDir, "sound.ogg");
     try {
-      await encodeAudio(audioSource, ogg);
+      await encodeAudio(audioSource, ogg, MAX_SECONDS);
       const ainfo = await probe(ogg);
       audioSeconds = ainfo.duration || 0;
       if (audioSeconds > 0.05) {
         outAudio = ogg;
-        if (ainfo.duration > MAX_SECONDS + 0.05) {
+        const sourceDuration = audioPath ? (await probe(audioPath)).duration : info.duration;
+        if (sourceDuration > MAX_SECONDS + 0.05) {
           warnings.push(
-            `O áudio tinha mais de ${MAX_SECONDS} s; recortei no limite.`,
+            `A faixa usa os primeiros ${MAX_SECONDS} segundos do áudio.`,
           );
         }
       } else {
@@ -234,7 +254,8 @@ export async function convertToSticker({
   return {
     stickerPath,
     audioPath: outAudio,
-    isAnimated,
+    isAnimated: frameCount > 1,
+    frameCount,
     stickerBytes,
     audioSeconds,
     sourceDuration: info.duration,

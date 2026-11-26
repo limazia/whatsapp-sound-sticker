@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: webPath("."),
-    publicDir: false,
+    define: { "import.meta.env.API_KEY": JSON.stringify(env.API_KEY ?? "") },
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

@@ -1,16 +1,18 @@
 import { useState } from "react";
 
 import { Button } from "@components/ui/button";
-import { Input } from "@components/ui/input";
+import { BrazilPhoneField } from "@components/brazil-phone-field";
 import { message } from "@lib/api";
 import { useWhatsApp } from "@/features/whatsapp/hooks/use-whatsapp";
 
 export function WhatsAppPage() {
   const [phone, setPhone] = useState("");
-  const { whatsAppState: state, updateWhatsApp, logs, eventsError } = useWhatsApp();
+  const { whatsAppState: state, updateWhatsApp, logs, eventsError, activityLive } = useWhatsApp();
   const busy = updateWhatsApp.isPending;
-  const error = updateWhatsApp.error ?? eventsError;
+  const error = updateWhatsApp.error;
   const connection = state?.connection ?? "disconnected";
+
+  const canPair = !busy && connection !== "open" && /^\d{10,11}$/.test(phone);
 
   return (
     <>
@@ -29,12 +31,13 @@ export function WhatsAppPage() {
             if (window.confirm("Desconectar e apagar a sessão salva do WhatsApp?")) updateWhatsApp.mutate({ type: "disconnect" });
           }}>Desconectar WhatsApp</Button>
         </div>
-        <form onSubmit={(event) => { event.preventDefault(); updateWhatsApp.mutate({ type: "pair", phone }); }}>
-          <label className="stack">
-            <span>Ou conecte com o número e DDI</span>
-            <Input type="tel" autoComplete="tel" placeholder="5511999999999" value={phone} onChange={(event) => setPhone(event.target.value)} required />
-          </label>
-          <Button variant="secondary" disabled={busy || connection === "open"}>Gerar código</Button>
+        <form onSubmit={(event) => {
+          event.preventDefault();
+          if (canPair) updateWhatsApp.mutate({ type: "pair", phone: "55" + phone });
+        }}>
+          <BrazilPhoneField label="Ou conecte pelo número do WhatsApp" value={phone} onChange={setPhone}
+            disabled={busy || connection === "open"} />
+          <Button variant="secondary" disabled={!canPair}>Gerar código</Button>
         </form>
         {state?.qrDataUrl && <div className="qr-wrap">
           <div className="qr-glow"><img src={state.qrDataUrl} alt="QR para conectar ao WhatsApp" /></div>
@@ -44,9 +47,20 @@ export function WhatsAppPage() {
         {(error || state?.lastError) && <p className="feedback error" role="alert">{error ? message(error) : state?.lastError}</p>}
       </section>
       <section className="card">
-        <h2>Atividade</h2>
+        <div className="card-head">
+          <h2>Atividade</h2>
+          <span role="status" className={activityLive ? "pill open" : "pill"}>{activityLive ? "Ao vivo" : eventsError ? "Sem conexão" : "Conectando ao painel…"}</span>
+        </div>
+        {eventsError && <p role="alert" className="feedback error">{message(eventsError)}</p>}
         {logs.length ? <ul className="log-list">{logs.map((line, index) => <li key={`${index}:${line}`}>{line}</li>)}</ul>
-          : <p className="hint">Os eventos da sessão aparecem aqui.</p>}
+          : activityLive && <div className="activity-empty">
+              <span className="activity-wave" aria-hidden="true"><i /><i /><i /><i /><i /></span>
+              <h3>Nenhuma atividade por aqui ainda</h3>
+              <p className="hint">{connection === "open"
+                ? "Envie uma figurinha para acompanhar o envio aqui."
+                : "Conecte o WhatsApp pelo QR ou pelo código de pareamento acima."}</p>
+              {connection === "open" && <Button asChild variant="secondary"><a href="/">Criar figurinha</a></Button>}
+            </div>}
       </section>
     </>
   );

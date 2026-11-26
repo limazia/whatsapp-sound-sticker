@@ -5,7 +5,6 @@ import type { NodeEnvironment } from "@/config/env.config";
 const allowedOrigins: Record<NodeEnvironment, string[]> = {
   development: ["*"],
   test: ["*"],
-  qa: ["*"],
   production: ["*"],
 };
 
