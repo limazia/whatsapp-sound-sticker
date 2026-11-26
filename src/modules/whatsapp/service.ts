@@ -126,7 +126,7 @@ export function createWhatsAppManager({
   onActivity,
 }: { onChange?: ChangeHandler; onActivity?: (message: string) => void } = {}) {
   let sock: Socket | null = null;
-  let checkAudio: Awaited<ReturnType<typeof createAudioCheck>>;
+  let checkAudio: ReturnType<typeof createAudioCheck>;
   let state = emptyState();
   let connecting: Promise<ReturnType<typeof getState>> | undefined;
   let reconnect: NodeJS.Timeout | undefined;
@@ -161,7 +161,7 @@ export function createWhatsAppManager({
 
     await mkdir(authDir(), { recursive: true });
     const auth = await useMultiFileAuthState(authDir());
-    checkAudio = await createAudioCheck(onActivity);
+    checkAudio = createAudioCheck(onActivity);
     if (stopped || disconnecting) return getState();
 
     const socket = makeWASocket({
@@ -200,11 +200,17 @@ export function createWhatsAppManager({
             if (quote && checkAudio) void checkAudio(quote, "citação");
           }
           const activity = describeIncomingSticker(content, transport);
-          if (activity) onActivity?.(activity);
+          if (activity) {
+            onActivity?.(activity);
+            void checkAudio?.(content, "recebida");
+          }
         }
         if (!key.fromMe || !self.includes(jidNormalizedUser(key.remoteJid))) continue;
         const description = describeSticker(content);
-        if (description) onActivity?.(`Figurinha na conversa com você. ${description}`);
+        if (description) {
+          onActivity?.(`Figurinha na conversa com você. ${description}`);
+          void checkAudio?.(content, "recebida");
+        }
       }
     });
     socket.ev.on("messages.update", (updates) => {

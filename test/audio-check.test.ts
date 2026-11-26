@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createCipheriv, createHash, createHmac, randomBytes } from "node:crypto";
 import { test, vi } from "vitest";
 
-import { checkUploadedAudio } from "@/modules/whatsapp/audio-check";
+import { checkUploadedAudio, createAudioCheck } from "@/modules/whatsapp/audio-check";
 import { getMediaKeys } from "@/modules/whatsapp/client";
 
 test("confere os hashes do download e do áudio aberto", async () => {
@@ -25,4 +25,17 @@ test("confere os hashes do download e do áudio aberto", async () => {
   } finally {
     request.mockRestore();
   }
+});
+
+test("vincula o reenvio ao mesmo áudio e imagem e identifica um novo upload", async () => {
+  const logs: string[] = [];
+  const check = createAudioCheck((line) => logs.push(line));
+  assert.ok(check);
+  const audioMessage = { fileSha256: Buffer.from("som"), fileEncSha256: Buffer.from("a"), streamingSidecar: Buffer.from("v") };
+  const stickerMessage = { fileSha256: Buffer.from("imagem"), audioMessage };
+  await check({ stickerMessage }, "envio");
+  await check({ stickerMessage: { ...stickerMessage, fileSha256: Buffer.from("outra") } }, "recebida");
+  assert.equal(logs.length, 1);
+  await check({ stickerMessage: { ...stickerMessage, audioMessage: { ...audioMessage, fileEncSha256: Buffer.from("b") } } }, "recebida");
+  assert.match(logs[1], /upload do áudio: diferente; verificação para reprodução: igual/);
 });

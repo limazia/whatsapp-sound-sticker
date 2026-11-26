@@ -1,10 +1,7 @@
 import { createDecipheriv, createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 
 import { getMediaKeys } from "@/modules/whatsapp/client";
 import type { MessageProto, StickerProto } from "@/modules/whatsapp/client";
-import { tmpDir } from "@/shared/paths";
 
 const maxBytes = 512 * 1024;
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
@@ -43,27 +40,32 @@ export async function checkUploadedAudio(audio: NonNullable<StickerProto["audioM
   return "Download e descriptografia confirmados. O Ogg Opus recuperado é idêntico ao original.";
 }
 
-export async function createAudioCheck(onActivity?: (line: string) => void) {
+export function createAudioCheck(onActivity?: (line: string) => void) {
   if (!onActivity || process.env.NODE_ENV === "production") return;
-  const marker = await readFile(join(tmpDir(), "audio-check.json"), "utf8").catch(() => "");
-  if (!marker) return;
-  let check;
-  try { check = JSON.parse(marker); } catch { return; }
-  if (!/^[a-f0-9]{64}$/.test(check?.sha256) || !Number.isFinite(check.until) || check.until <= Date.now()) return;
-  let running = false;
-  let checkedOutgoing = false;
-  return async (message: MessageProto, source: "envio" | "citação") => {
-    if (running || check.until <= Date.now()) return;
-    if (source === "envio" && checkedOutgoing) return;
-    const audio = (message.audioStickerMessage?.message?.stickerMessage ?? message.stickerMessage)?.audioMessage;
-    if (!audio || (source === "citação" && digest(audio.fileSha256) !== check.sha256)) {
-      onActivity("Diagnóstico: a citação não contém a faixa do último teste.");
+  const uploads = new Map<string, { encrypted?: string; sidecar?: string }>();
+  return async (message: MessageProto, source: "envio" | "citação" | "recebida") => {
+    const sticker = message.audioStickerMessage?.message?.stickerMessage ?? message.stickerMessage;
+    const audio = sticker?.audioMessage;
+    const imageHash = digest(sticker?.fileSha256);
+    const audioHash = digest(audio?.fileSha256);
+    if (!audio || !imageHash || !audioHash) return;
+    const key = imageHash + ":" + audioHash;
+    const encrypted = digest(audio.fileEncSha256) || undefined;
+    const sidecar = audio.streamingSidecar?.length ? sha256(audio.streamingSidecar) : undefined;
+    if (source === "envio") {
+      uploads.delete(key);
+      uploads.set(key, { encrypted, sidecar });
+      const oldest = uploads.keys().next().value;
+      if (uploads.size > 30 && oldest) uploads.delete(oldest);
+      try { onActivity(`Verificação do primeiro envio no servidor: ${await checkUploadedAudio(audio)}`); }
+      catch { onActivity("Falha ao baixar ou abrir no servidor a faixa do primeiro envio."); }
       return;
     }
-    if (source === "envio") checkedOutgoing = true;
-    running = true;
-    try { onActivity(`Diagnóstico do ${source === "envio" ? "envio original" : "áudio citado"}: ${await checkUploadedAudio(audio)}`); }
-    catch { onActivity("Diagnóstico: falha ao baixar ou abrir a faixa no servidor."); }
-    finally { running = false; }
+    const original = uploads.get(key);
+    if (!original) return;
+    function compare(left?: string, right?: string) {
+      return left && right ? (left === right ? "igual" : "diferente") : "indisponível";
+    }
+    onActivity(`Comparação com o último envio do site desta figurinha: imagem e áudio idênticos; upload do áudio: ${compare(original.encrypted, encrypted)}; verificação para reprodução: ${compare(original.sidecar, sidecar)}.`);
   };
 }
