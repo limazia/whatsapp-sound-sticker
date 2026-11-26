@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { NavLink } from "react-router-dom";
 
 import { Button } from "@components/ui/button";
 import { ApiError, message } from "@lib/api";
@@ -32,6 +33,7 @@ export function AppLayout({ adminView = false }: AppLayoutProps) {
         <h1><a href="/">Figurinha com som</a></h1>
       </div>
       {role === "admin" && <div className="account-actions">
+        <NavLink to="/admin">Administração</NavLink>
         <Button variant="ghost" onClick={() => logout.mutate(undefined, {
           onSuccess: () => { if (adminView) location.assign("/"); },
         })}>Sair</Button>
