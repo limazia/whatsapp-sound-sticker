@@ -81,6 +81,7 @@ if (result.audioPath) {
   const outgoing = generateWAMessageFromContent("5500000000000@s.whatsapp.net", sound, { messageId: "offline" });
   const sticker = outgoing.message.audioStickerMessage?.message?.stickerMessage;
   ok(sticker, "sound proto has stickerMessage");
+  ok(Number(sticker.stickerSentTs) > 0, "sticker send timestamp present");
   ok(sticker.audioMessage, "stickerMessage.audioMessage present");
   ok(sticker.audioMessage.ptt == null, "audio is not marked as a voice note");
   ok(sticker.audioMessage.streamingSidecar?.length, "streaming sidecar present");

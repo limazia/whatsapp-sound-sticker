@@ -50,6 +50,7 @@ interface MediaProto {
 }
 
 export interface StickerProto extends MediaProto {
+  stickerSentTs?: number | { toString(): string } | null;
   width?: number | null;
   height?: number | null;
   isAnimated?: boolean | null;
@@ -113,7 +114,7 @@ export async function prepareSoundSticker(payload: StickerPayload, upload: Media
   const { stickerAudio, ...sticker } = payload;
   if (!stickerAudio) throw new Error("A figurinha precisa de uma faixa de áudio.");
   const { stickerMessage, messageContextInfo } = await generateWAMessageContent(
-    { ...sticker, width: 512, height: 512 }, { upload, logger },
+    { ...sticker, width: 512, height: 512, stickerSentTs: Date.now() }, { upload, logger },
   );
   if (!stickerMessage) throw new Error("Não foi possível preparar a figurinha.");
 
